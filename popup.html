@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ThinkNote Bookmarker</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="lib/sql-wasm.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="tabs">
+      <button class="tab-button active" data-tab="save">Save</button>
+      <button class="tab-button" data-tab="options">Options</button>
+    </div>
+
+    <div class="tab-content" id="save-tab">
+      <div class="form-group">
+        <label for="url">URL:</label>
+        <input type="text" id="url" readonly>
+      </div>
+      <div class="form-group">
+        <label for="title">Title:</label>
+        <input type="text" id="title">
+      </div>
+      <div class="form-group">
+        <label for="description">Description:</label>
+        <textarea id="description"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="tags">Tags:</label>
+        <input type="text" id="tags" placeholder="Separate tags with commas">
+      </div>
+      <button id="save-button" class="primary-button">Save Bookmark</button>
+    </div>
+
+    <div class="tab-content hidden" id="options-tab">
+      <div class="form-group">
+        <label for="webdav-url">WebDAV URL:</label>
+        <input type="text" id="webdav-url" placeholder="https://your-webdav-server.com">
+      </div>
+      <div class="form-group">
+        <label for="username">Username:</label>
+        <input type="text" id="username">
+      </div>
+      <div class="form-group">
+        <label for="password">Password:</label>
+        <input type="password" id="password">
+      </div>
+      <button id="save-options-button" class="primary-button">Save Options</button>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 

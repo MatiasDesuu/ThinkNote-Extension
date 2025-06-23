@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "ThinkNote Bookmarker",
+  "version": "1.0",
+  "description": "Save bookmarks to a WebDAV SQLite database",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "512": "icons/icon512.png"
+    }
+  },
+  "icons": {
+    "512": "icons/icon512.png"
+  }
+} 
