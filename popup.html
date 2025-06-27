@@ -8,7 +8,8 @@
 <body>
   <div class="container">
     <div class="tabs">
-      <button class="tab-button active" data-tab="save">Save</button>
+      <button class="tab-button active" data-tab="save">Save Bookmark</button>
+      <button class="tab-button" data-tab="think">Save Think</button>
       <button class="tab-button" data-tab="options">Options</button>
     </div>
 
@@ -30,6 +31,18 @@
         <input type="text" id="tags" placeholder="Separate tags with commas">
       </div>
       <button id="save-button" class="primary-button">Save Bookmark</button>
+    </div>
+
+    <div class="tab-content hidden" id="think-tab">
+      <div class="form-group">
+        <label for="think-title">Title:</label>
+        <input type="text" id="think-title" placeholder="Enter a title for your think">
+      </div>
+      <div class="form-group">
+        <label for="think-content">Content:</label>
+        <textarea id="think-content" placeholder="Enter your think content manually"></textarea>
+      </div>
+      <button id="save-think-button" class="primary-button">Save Think</button>
     </div>
 
     <div class="tab-content hidden" id="options-tab">

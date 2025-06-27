@@ -9,6 +9,7 @@ const CONFIG_KEYS = {
 const tabButtons = document.querySelectorAll('.tab-button');
 const tabContents = document.querySelectorAll('.tab-content');
 const saveButton = document.getElementById('save-button');
+const saveThinkButton = document.getElementById('save-think-button');
 const saveOptionsButton = document.getElementById('save-options-button');
 
 // Form elements
@@ -16,6 +17,8 @@ const urlInput = document.getElementById('url');
 const titleInput = document.getElementById('title');
 const descriptionInput = document.getElementById('description');
 const tagsInput = document.getElementById('tags');
+const thinkTitleInput = document.getElementById('think-title');
+const thinkContentInput = document.getElementById('think-content');
 const webdavUrlInput = document.getElementById('webdav-url');
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
@@ -474,4 +477,126 @@ saveOptionsButton.addEventListener('click', async () => {
 
   await chrome.storage.sync.set(config);
   await showInfoDialog('Options Saved', 'Your options have been saved successfully.');
+});
+
+// Load selected text when think tab is opened
+tabButtons.forEach(button => {
+  button.addEventListener('click', async () => {
+    const tabName = button.dataset.tab;
+    
+    // Update active tab button
+    tabButtons.forEach(btn => btn.classList.remove('active'));
+    button.classList.add('active');
+    
+    // Show selected tab content
+    tabContents.forEach(content => {
+      content.classList.toggle('hidden', content.id !== `${tabName}-tab`);
+    });
+  });
+});
+
+// Save think
+saveThinkButton.addEventListener('click', async () => {
+  const title = thinkTitleInput.value.trim();
+  const content = thinkContentInput.value.trim();
+
+  if (!content) {
+    alert('Please enter content for your think.');
+    return;
+  }
+
+  if (!title) {
+    alert('Please enter a title for your think.');
+    return;
+  }
+
+  try {
+    const config = await chrome.storage.sync.get([
+      CONFIG_KEYS.WEBDAV_URL,
+      CONFIG_KEYS.USERNAME,
+      CONFIG_KEYS.PASSWORD
+    ]);
+
+    if (!config[CONFIG_KEYS.WEBDAV_URL]) {
+      alert('Please configure WebDAV settings first');
+      return;
+    }
+
+    const webdavUrl = cleanWebDAVUrl(config[CONFIG_KEYS.WEBDAV_URL]);
+    const dbUrl = `${webdavUrl}/thinknote.db`;
+
+    // Download the current database
+    const dbResponse = await fetch(dbUrl, {
+      headers: {
+        'Authorization': 'Basic ' + btoa(`${config[CONFIG_KEYS.USERNAME]}:${config[CONFIG_KEYS.PASSWORD]}`),
+        'Origin': chrome.runtime.getURL('')
+      }
+    });
+
+    if (!dbResponse.ok) {
+      throw new Error('Failed to download database');
+    }
+
+    const dbBlob = await dbResponse.blob();
+    const dbArrayBuffer = await dbBlob.arrayBuffer();
+    
+    // Open the database
+    const db = await openDatabase(dbArrayBuffer);
+    
+    // Get next think ID
+    const nextIdResult = await db.executeSql('SELECT MAX(id) as max_id FROM thinks');
+    const maxId = nextIdResult.rows.item(0).max_id;
+    const nextId = maxId ? maxId + 1 : 1;
+    
+    // Get current timestamp
+    const currentTime = Date.now();
+    
+    // Insert new think
+    await db.executeSql(
+      'INSERT INTO thinks (id, title, content, created_at, updated_at, deleted_at, is_favorite, tags, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        nextId,
+        title,
+        content,
+        currentTime,
+        currentTime,
+        null,
+        0,
+        'EMPTY',
+        0
+      ]
+    );
+    
+    // Update sync_info
+    await db.executeSql(
+      'UPDATE sync_info SET last_modified = ? WHERE id = 1',
+      [currentTime]
+    );
+    
+    // Get the updated database as a blob
+    const updatedDbBlob = await db.export();
+    
+    // Upload the updated database
+    const uploadResponse = await fetch(dbUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'Basic ' + btoa(`${config[CONFIG_KEYS.USERNAME]}:${config[CONFIG_KEYS.PASSWORD]}`),
+        'Content-Type': 'application/x-sqlite3',
+        'Origin': chrome.runtime.getURL('')
+      },
+      body: updatedDbBlob
+    });
+
+    if (uploadResponse.ok) {
+      showSuccessAnimation();
+      // Clear the form
+      thinkTitleInput.value = '';
+      thinkContentInput.value = '';
+    } else {
+      throw new Error('Failed to upload updated database');
+    }
+  } catch (error) {
+    console.error('Error saving think:', error);
+    alert('Error saving think: ' + error.message);
+  }
 }); 
