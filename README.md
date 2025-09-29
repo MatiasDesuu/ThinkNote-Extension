@@ -28,51 +28,13 @@ A simple Chrome extension to save bookmarks to a WebDAV SQLite database.
 1. Navigate to any webpage you want to bookmark
 2. Click on the extension icon
 3. The URL and title will be automatically filled
-4. Add a description and tags (comma-separated)
+4. Add a description and tags (comma-separated) (optional)
 5. Click "Save Bookmark"
-
-## Database Structure
-
-The extension uses a SQLite database with the following tables:
-
-### bookmarks
-- id (INTEGER PRIMARY KEY)
-- title (TEXT)
-- url (TEXT)
-- description (TEXT)
-- timestamp (TEXT)
-- tag_ids (TEXT)
-
-### bookmarks_tag_url_patterns
-- id (INTEGER PRIMARY KEY)
-- url_pattern (TEXT)
-- tag (TEXT)
-
-### bookmarks_tags
-- id (INTEGER PRIMARY KEY)
-- tag (TEXT)
-
-### sync_info
-- id (INTEGER PRIMARY KEY)
-- last_modified (TEXT)
+6. You can also save text fragments directly to the Thinks section (ThinkNote app)
 
 ## Development
 
 The extension is built using vanilla JavaScript and HTML/CSS. No build process is required.
-
-### Project Structure
-
-```
-thinknote_extension/
-├── manifest.json
-├── popup.html
-├── popup.js
-├── styles.css
-└── icons/
-    ├── icon16.png
-    ├── icon48.png
-    └── icon128.png
-```
 
 ## License
 
