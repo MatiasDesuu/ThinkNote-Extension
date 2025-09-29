@@ -85,7 +85,7 @@ function cleanWebDAVUrl(url) {
 }
 
 // Helper function to validate bookmark data
-function validateBookmarkData() {
+async function validateBookmarkData() {
   const title = titleInput.value.trim();
   const url = urlInput.value.trim();
   const description = descriptionInput.value.trim();
@@ -99,12 +99,12 @@ function validateBookmarkData() {
   });
 
   if (!title || title.length === 0) {
-    alert('Title is required and cannot be empty');
+    await showInfoDialog('Missing title', 'Title is required and cannot be empty');
     return false;
   }
 
   if (!url || url.length === 0) {
-    alert('URL is required and cannot be empty');
+    await showInfoDialog('Missing URL', 'URL is required and cannot be empty');
     return false;
   }
 
@@ -334,7 +334,7 @@ function showInfoDialog(title, content) {
 // Save bookmark
 saveButton.addEventListener('click', async () => {
   // Validate data before proceeding
-  if (!validateBookmarkData()) {
+  if (!await validateBookmarkData()) {
     return;
   }
 
@@ -501,12 +501,12 @@ saveThinkButton.addEventListener('click', async () => {
   const content = thinkContentInput.value.trim();
 
   if (!content) {
-    alert('Please enter content for your think.');
+    await showInfoDialog('Missing content', 'Please enter content for your think.');
     return;
   }
 
   if (!title) {
-    alert('Please enter a title for your think.');
+    await showInfoDialog('Missing title', 'Please enter a title for your think.');
     return;
   }
 

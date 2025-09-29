@@ -1,13 +1,13 @@
 :root {
-  --primary-color: #b388ff;
-  --primary-hover: #d1b3ff;
-  --background-color: #1a1b1e;
-  --surface-color: #2d2d3a;
-  --text-primary: #e8eaed;
-  --text-secondary: #9aa0a6;
-  --border-color: #3c3c4a;
-  --input-background: #1f1f2a;
-  --success-color: #81c995;
+  --primary-color: #2da7ff;
+  --primary-hover: #1280cf;
+  --background-color: #0d0d0f;
+  --surface-color: #1a1a1f;
+  --text-primary: #f5f5f7;
+  --text-secondary: #c7c7cc;
+  --border-color: #3a3a40;
+  --input-background: #2a2a31;
+  --success-color: #20BF55;
 }
 
 body {
@@ -33,6 +33,7 @@ body {
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 8px;
   margin-bottom: 8px;
+  justify-content: center;
 }
 
 .tab-button {
@@ -44,6 +45,11 @@ body {
   color: var(--text-secondary);
   border-radius: 8px;
   transition: all 0.2s ease;
+  flex: 1;
+  min-width: 0; 
+  display: flex; 
+  align-items: center;
+  justify-content: center;
 }
 
 .tab-button:hover {
@@ -78,6 +84,18 @@ label {
   font-weight: 500;
 }
 
+label[for="url"],
+label[for="title"],
+label[for="description"],
+label[for="tags"],
+label[for="think-title"],
+label[for="think-content"],
+label[for="webdav-url"],
+label[for="username"],
+label[for="password"] {
+  font-weight: 700;
+}
+
 input, textarea {
   padding: 12px;
   border: 1px solid var(--border-color);
@@ -107,10 +125,15 @@ textarea {
   border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   transition: all 0.2s ease;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  width: 100%;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .primary-button:hover {
@@ -251,17 +274,20 @@ input[readonly] {
 .dialog-buttons {
   display: flex;
   gap: 12px;
-  justify-content: flex-end;
+  justify-content: center; /* center the button group horizontally */
 }
 
 .dialog-button {
-  padding: 8px 16px;
+  padding: 10px 12px;
   border-radius: 8px;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   border: none;
+  flex: 1;          /* allow buttons to expand and share available width */
+  min-width: 0;     /* prevents overflow in flex items */
+  text-align: center;
 }
 
 .dialog-button.secondary {
