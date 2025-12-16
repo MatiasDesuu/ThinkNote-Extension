@@ -1,13 +1,46 @@
 :root {
-  --primary-color: #2da7ff;
-  --primary-hover: #1280cf;
-  --background-color: #0d0d0f;
-  --surface-color: #1a1a1f;
-  --text-primary: #f5f5f7;
-  --text-secondary: #c7c7cc;
-  --border-color: #3a3a40;
-  --input-background: #2a2a31;
+  --primary-color: #65ABFF;
+  --primary-hover: #BAC8DF;
+  --background-color: #121A4F;
+  --surface-color: #121A27;
+  --text-primary: #DFE3E5;
+  --text-secondary: #EFF1F2;
+  --border-color: #79808E;
+  --input-background: #202733;
   --success-color: #20BF55;
+}
+
+.light-theme {
+  --primary-color: #175DDC;
+  --primary-hover: #1A41AC;
+  --background-color: #ffffff;
+  --surface-color: #F3F6F9;
+  --text-primary: #1B2029;
+  --text-secondary: #232831;
+  --border-color: #5A6D91;
+  --input-background: #ffffff;
+}
+
+.eink.light-theme {
+  --background-color: #ffffff;
+  --surface-color: #ffffff;
+  --text-primary: #000000;
+  --text-secondary: #000000;
+  --border-color: #000000;
+  --input-background: #ffffff;
+  --primary-color: #000000;
+  --primary-hover: #333333;
+}
+
+.eink:not(.light-theme) {
+  --background-color: #000000;
+  --surface-color: #000000;
+  --text-primary: #ffffff;
+  --text-secondary: #ffffff;
+  --border-color: #ffffff;
+  --input-background: #000000;
+  --primary-color: #ffffff;
+  --primary-hover: #cccccc;
 }
 
 body {
@@ -57,10 +90,50 @@ body {
   color: var(--primary-color);
 }
 
+body:not(.light-theme):not(.eink) .tab-button:hover {
+  background-color: #2D3745;
+}
+
+.light-theme .tab-button:hover {
+  background-color: #E8ECF7;
+}
+
+.eink .tab-button:hover {
+  background-color: transparent;
+}
+
 .tab-button.active {
   color: var(--primary-color);
   background-color: rgba(138, 180, 248, 0.1);
 }
+
+.light-theme .tab-button {
+  color: #596987;
+}
+
+.light-theme .tab-button.active {
+  color: #175DDC;
+}
+
+body:not(.light-theme):not(.eink) .tab-button {
+  color: #737C89;
+}
+
+body:not(.light-theme):not(.eink) .tab-button.active {
+  color: #65ABFF;
+}
+
+.eink:not(.light-theme) .tab-button.active {
+  background-color: #fff;
+  color: #000;
+}
+
+.eink.light-theme .tab-button.active {
+  background-color: #000;
+  color: #fff;
+}
+
+
 
 .tab-content {
   display: flex;
@@ -76,6 +149,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.toggle-row {
+  flex-direction: row;
+  gap: 16px;
 }
 
 label {
@@ -150,6 +228,44 @@ input[readonly] {
   background-color: var(--input-background);
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+/* Toggle button styles for dark mode and e-ink mode */
+input[type="checkbox"] {
+  display: none;
+}
+
+label[for="dark-mode-toggle"], label[for="eink-mode-toggle"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background-color: var(--input-background);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  font-weight: 500;
+  user-select: none;
+  flex: 1;
+}
+
+label[for="dark-mode-toggle"]:hover, label[for="eink-mode-toggle"]:hover {
+  background-color: rgba(138, 180, 248, 0.1);
+  border-color: var(--primary-color);
+}
+
+label[for="dark-mode-toggle"].checked, label[for="eink-mode-toggle"].checked {
+  background-color: var(--primary-color);
+  color: var(--background-color);
+  border-color: var(--primary-color);
+}
+
+label[for="dark-mode-toggle"].checked:hover, label[for="eink-mode-toggle"].checked:hover {
+  background-color: var(--primary-hover);
 }
 
 .success-animation {

@@ -2,7 +2,9 @@
 const CONFIG_KEYS = {
   WEBDAV_URL: 'webdav_url',
   USERNAME: 'username',
-  PASSWORD: 'password'
+  PASSWORD: 'password',
+  DARK_MODE: 'dark_mode',
+  EINK_MODE: 'eink_mode'
 };
 
 // DOM Elements
@@ -22,6 +24,8 @@ const thinkContentInput = document.getElementById('think-content');
 const webdavUrlInput = document.getElementById('webdav-url');
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
+const darkModeToggle = document.getElementById('dark-mode-toggle');
+const einkModeToggle = document.getElementById('eink-mode-toggle');
 
 // SQL.js initialization
 let SQL;
@@ -84,6 +88,20 @@ function cleanWebDAVUrl(url) {
   return url;
 }
 
+// Function to apply theme
+function applyTheme(isDark, isEink) {
+  if (isDark) {
+    document.body.classList.remove('light-theme');
+  } else {
+    document.body.classList.add('light-theme');
+  }
+  if (isEink) {
+    document.body.classList.add('eink');
+  } else {
+    document.body.classList.remove('eink');
+  }
+}
+
 // Helper function to validate bookmark data
 async function validateBookmarkData() {
   const title = titleInput.value.trim();
@@ -142,12 +160,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     const config = await chrome.storage.sync.get([
       CONFIG_KEYS.WEBDAV_URL,
       CONFIG_KEYS.USERNAME,
-      CONFIG_KEYS.PASSWORD
+      CONFIG_KEYS.PASSWORD,
+      CONFIG_KEYS.DARK_MODE,
+      CONFIG_KEYS.EINK_MODE
     ]);
     
     webdavUrlInput.value = config[CONFIG_KEYS.WEBDAV_URL] || '';
     usernameInput.value = config[CONFIG_KEYS.USERNAME] || '';
     passwordInput.value = config[CONFIG_KEYS.PASSWORD] || '';
+    darkModeToggle.checked = config[CONFIG_KEYS.DARK_MODE] !== false; // default true
+    einkModeToggle.checked = config[CONFIG_KEYS.EINK_MODE] === true; // default false
+    
+    // Set initial checked class on labels
+    darkModeToggle.parentElement.classList.toggle('checked', darkModeToggle.checked);
+    einkModeToggle.parentElement.classList.toggle('checked', einkModeToggle.checked);
+    
+    // Apply theme
+    applyTheme(darkModeToggle.checked, einkModeToggle.checked);
   } catch (error) {
     console.error('Error in DOMContentLoaded:', error);
     alert('Error initializing extension: ' + error.message);
@@ -472,11 +501,29 @@ saveOptionsButton.addEventListener('click', async () => {
   const config = {
     [CONFIG_KEYS.WEBDAV_URL]: cleanWebDAVUrl(webdavUrlInput.value),
     [CONFIG_KEYS.USERNAME]: usernameInput.value,
-    [CONFIG_KEYS.PASSWORD]: passwordInput.value
+    [CONFIG_KEYS.PASSWORD]: passwordInput.value,
+    [CONFIG_KEYS.DARK_MODE]: darkModeToggle.checked,
+    [CONFIG_KEYS.EINK_MODE]: einkModeToggle.checked
   };
 
   await chrome.storage.sync.set(config);
   await showInfoDialog('Options Saved', 'Your options have been saved successfully.');
+});
+
+// Apply theme on toggle change
+darkModeToggle.addEventListener('change', async () => {
+  darkModeToggle.parentElement.classList.toggle('checked', darkModeToggle.checked);
+  applyTheme(darkModeToggle.checked, einkModeToggle.checked);
+  // Save immediately
+  await chrome.storage.sync.set({ [CONFIG_KEYS.DARK_MODE]: darkModeToggle.checked });
+});
+
+// Apply theme on eink toggle change
+einkModeToggle.addEventListener('change', async () => {
+  einkModeToggle.parentElement.classList.toggle('checked', einkModeToggle.checked);
+  applyTheme(darkModeToggle.checked, einkModeToggle.checked);
+  // Save immediately
+  await chrome.storage.sync.set({ [CONFIG_KEYS.EINK_MODE]: einkModeToggle.checked });
 });
 
 // Load selected text when think tab is opened
