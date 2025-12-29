@@ -361,7 +361,7 @@ function showInfoDialog(title, content) {
 }
 
 // Save bookmark
-saveButton.addEventListener('click', async () => {
+async function saveBookmark() {
   // Validate data before proceeding
   if (!await validateBookmarkData()) {
     return;
@@ -493,6 +493,20 @@ saveButton.addEventListener('click', async () => {
   } catch (error) {
     console.error('Error saving bookmark:', error);
     alert('Error saving bookmark: ' + error.message);
+  }
+}
+
+saveButton.addEventListener('click', saveBookmark);
+
+titleInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    saveBookmark();
+  }
+});
+
+tagsInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    saveBookmark();
   }
 });
 
