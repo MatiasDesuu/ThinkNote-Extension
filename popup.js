@@ -79,6 +79,20 @@ async function initSQL() {
   }
 }
 
+// Function to ensure bookmarks table has required columns
+async function ensureBookmarksSchema(db) {
+  try {
+    await db.executeSql('ALTER TABLE bookmarks ADD COLUMN created_at TEXT');
+  } catch (e) {
+    // Column may already exist, ignore
+  }
+  try {
+    await db.executeSql('ALTER TABLE bookmarks ADD COLUMN updated_at TEXT');
+  } catch (e) {
+    // Column may already exist, ignore
+  }
+}
+
 // Helper function to clean WebDAV URL
 function cleanWebDAVUrl(url) {
   // Remove trailing slashes
@@ -249,13 +263,21 @@ async function checkUrlExists(db, url) {
 
 // Function to update existing bookmark
 async function updateExistingBookmark(db, bookmarkId, bookmarkData) {
+  // Ensure created_at is set
+  const current = await db.executeSql('SELECT timestamp, created_at FROM bookmarks WHERE id = ?', [bookmarkId]);
+  if (current.rows.length > 0 && !current.rows.item(0).created_at) {
+    await db.executeSql('UPDATE bookmarks SET created_at = ? WHERE id = ?', [current.rows.item(0).timestamp, bookmarkId]);
+  }
+  
+  // Update the bookmark with new data and updated_at
   await db.executeSql(
-    'UPDATE bookmarks SET title = ?, description = ?, timestamp = ?, tag_ids = ? WHERE id = ?',
+    'UPDATE bookmarks SET title = ?, description = ?, timestamp = ?, tag_ids = ?, updated_at = ? WHERE id = ?',
     [
       bookmarkData.title,
       bookmarkData.description,
       bookmarkData.timestamp,
       bookmarkData.tag_ids,
+      new Date().toISOString(),
       bookmarkId
     ]
   );
@@ -400,6 +422,9 @@ async function saveBookmark() {
     // Open the database
     const db = await openDatabase(dbArrayBuffer);
     
+    // Ensure schema is up to date
+    await ensureBookmarksSchema(db);
+    
     // Check if URL already exists
     const existingBookmark = await checkUrlExists(db, urlInput.value.trim());
     
@@ -430,14 +455,17 @@ async function saveBookmark() {
     console.log('Tag IDs to be assigned:', tagIds);
     
     // Prepare bookmark data
+    const now = new Date().toISOString();
     const bookmarkData = {
       title: titleInput.value.trim(),
       url: urlInput.value.trim(),
       description: descriptionInput.value.trim(),
-      timestamp: new Date().toISOString(),
+      timestamp: now,
       lastModified: Date.now(),
       hidden: 0,
-      tag_ids: JSON.stringify(tagIds)
+      tag_ids: JSON.stringify(tagIds),
+      created_at: now,
+      updated_at: now
     };
 
     if (existingBookmark) {
@@ -451,7 +479,7 @@ async function saveBookmark() {
       
       // Insert new bookmark
       await db.executeSql(
-        'INSERT INTO bookmarks (id, title, url, description, timestamp, hidden, tag_ids) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO bookmarks (id, title, url, description, timestamp, hidden, tag_ids, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           bookmarkData.id,
           bookmarkData.title,
@@ -459,7 +487,9 @@ async function saveBookmark() {
           bookmarkData.description,
           bookmarkData.timestamp,
           bookmarkData.hidden,
-          bookmarkData.tag_ids
+          bookmarkData.tag_ids,
+          bookmarkData.created_at,
+          bookmarkData.updated_at
         ]
       );
       console.log('Inserting new bookmark with data:', bookmarkData);
