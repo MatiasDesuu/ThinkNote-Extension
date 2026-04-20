@@ -1,9 +1,12 @@
-// Background script for ThinkNote Bookmarker extension
 
-// Import SQL.js
+
+
 importScripts('lib/sql-wasm.js');
 
-// Create context menu when extension is installed
+const QUICK_SAVE_STORAGE_KEY = 'quick_save_bookmark_requested_at';
+const QUICK_SAVE_SILENT_KEY = 'quick_save_silent';
+
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'saveSelection',
@@ -12,11 +15,58 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Handle context menu clicks
+
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== 'quick-save-bookmark') {
+    return;
+  }
+
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!activeTab?.id || !activeTab?.url || !/^https?:\/\//i.test(activeTab.url)) {
+    return;
+  }
+
+  try {
+    const settings = await chrome.storage.sync.get([
+      'webdav_url',
+      'username',
+      'password',
+      QUICK_SAVE_SILENT_KEY
+    ]);
+
+    if (settings[QUICK_SAVE_SILENT_KEY] === true) {
+      const silentResult = await saveBookmarkToDatabase(activeTab, settings, { skipIfExists: true });
+
+      if (silentResult === 'saved') {
+        await safeNotify(activeTab.id, 'Bookmark saved', 'success');
+        return;
+      }
+
+      await chrome.storage.local.set({
+        [QUICK_SAVE_STORAGE_KEY]: Date.now()
+      });
+
+      await chrome.action.openPopup();
+      return;
+    }
+
+    await chrome.storage.local.set({
+      [QUICK_SAVE_STORAGE_KEY]: Date.now()
+    });
+
+    await chrome.action.openPopup();
+  } catch (error) {
+    console.error('Error triggering quick save shortcut:', error);
+    await safeNotify(activeTab.id, 'Quick save failed: ' + error.message, 'error');
+  }
+});
+
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'saveSelection') {
     try {
-      // Get WebDAV configuration
+      
       const config = await chrome.storage.sync.get([
         'webdav_url',
         'username',
@@ -24,7 +74,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       ]);
 
       if (!config.webdav_url) {
-        // Show custom notification to configure WebDAV
+        
         chrome.tabs.sendMessage(tab.id, {
           action: 'showNotification',
           message: 'Please configure WebDAV settings first',
@@ -33,10 +83,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         return;
       }
 
-      // Save the think directly
+      
       await saveThinkToDatabase(info.selectionText, config);
       
-      // Show success notification
+      
       chrome.tabs.sendMessage(tab.id, {
         action: 'showNotification',
         message: 'Think saved successfully!',
@@ -44,7 +94,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       });
     } catch (error) {
       console.error('Error saving think:', error);
-      // Show error notification
+      
       chrome.tabs.sendMessage(tab.id, {
         action: 'showNotification',
         message: 'Error saving think: ' + error.message,
@@ -54,12 +104,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-// Function to save think to database
+
 async function saveThinkToDatabase(selectedText, config) {
   const webdavUrl = cleanWebDAVUrl(config.webdav_url);
   const dbUrl = `${webdavUrl}/thinknote.db`;
 
-  // Download the current database
+  
   const dbResponse = await fetch(dbUrl, {
     headers: {
       'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`),
@@ -74,26 +124,26 @@ async function saveThinkToDatabase(selectedText, config) {
   const dbBlob = await dbResponse.blob();
   const dbArrayBuffer = await dbBlob.arrayBuffer();
 
-  // Initialize SQL.js
+  
   const SQL = await initSqlJs({
     locateFile: file => `lib/${file}`
   });
 
   const db = new SQL.Database(new Uint8Array(dbArrayBuffer));
 
-  // Get next think ID
+  
   const nextIdResult = db.exec('SELECT MAX(id) as max_id FROM thinks');
   const maxId = nextIdResult[0]?.values[0]?.[0] || 0;
   const nextId = maxId + 1;
 
-  // Get current timestamp
+  
   const currentTime = Date.now();
 
-  // Generate title from first line of selected text
+  
   const firstLine = selectedText.split('\n')[0].trim();
   const title = firstLine.length > 50 ? firstLine.substring(0, 50) + '...' : firstLine;
 
-  // Insert new think
+  
   db.run(
     'INSERT INTO thinks (id, title, content, created_at, updated_at, deleted_at, is_favorite, tags, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
@@ -109,13 +159,84 @@ async function saveThinkToDatabase(selectedText, config) {
     ]
   );
 
-  // Update sync_info
+  
   db.run('UPDATE sync_info SET last_modified = ? WHERE id = 1', [currentTime]);
 
-  // Export the updated database
+  
   const updatedDbBlob = db.export();
 
-  // Upload the updated database
+  
+  const uploadResponse = await fetch(dbUrl, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`),
+      'Content-Type': 'application/x-sqlite3',
+      'Origin': chrome.runtime.getURL('')
+    },
+    body: updatedDbBlob
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error('Failed to upload updated database');
+  }
+}
+
+async function saveBookmarkToDatabase(tab, config, options = {}) {
+  if (!config.webdav_url) {
+    throw new Error('Please configure WebDAV settings first');
+  }
+
+  const webdavUrl = cleanWebDAVUrl(config.webdav_url);
+  const dbUrl = `${webdavUrl}/thinknote.db`;
+
+  const dbResponse = await fetch(dbUrl, {
+    headers: {
+      'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`),
+      'Origin': chrome.runtime.getURL('')
+    }
+  });
+
+  if (!dbResponse.ok) {
+    throw new Error('Failed to download database');
+  }
+
+  const dbBlob = await dbResponse.blob();
+  const dbArrayBuffer = await dbBlob.arrayBuffer();
+
+  const SQL = await initSqlJs({
+    locateFile: file => `lib/${file}`
+  });
+
+  const db = new SQL.Database(new Uint8Array(dbArrayBuffer));
+
+  ensureBookmarksSchema(db);
+
+  const nowIso = new Date().toISOString();
+  const nowMs = Date.now();
+  const title = (tab.title || '').trim() || 'Untitled';
+  const existingBookmark = getBookmarkByUrl(db, tab.url);
+
+  if (existingBookmark) {
+    if (options.skipIfExists) {
+      return 'exists';
+    }
+
+    db.run(
+      'UPDATE bookmarks SET title = ?, timestamp = ?, updated_at = ? WHERE id = ?',
+      [title, nowIso, nowIso, existingBookmark.id]
+    );
+  } else {
+    const nextId = getNextBookmarkId(db);
+    db.run(
+      'INSERT INTO bookmarks (id, title, url, description, timestamp, hidden, tag_ids, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [nextId, title, tab.url, '', nowIso, 0, '[]', nowIso, nowIso]
+    );
+  }
+
+  db.run('UPDATE sync_info SET last_modified = ? WHERE id = 1', [nowMs]);
+
+  const updatedDbBlob = db.export();
+
   const uploadResponse = await fetch(dbUrl, {
     method: 'PUT',
     headers: {
@@ -130,10 +251,86 @@ async function saveThinkToDatabase(selectedText, config) {
     throw new Error('Failed to upload updated database');
   }
 
-  console.log('Think saved successfully');
+  return 'saved';
 }
 
-// Helper function to clean WebDAV URL
+function ensureBookmarksSchema(db) {
+  const columns = new Set();
+  const stmt = db.prepare('PRAGMA table_info(bookmarks)');
+
+  while (stmt.step()) {
+    const row = stmt.getAsObject();
+    if (row?.name) {
+      columns.add(row.name);
+    }
+  }
+  stmt.free();
+
+  if (!columns.has('created_at')) {
+    db.run('ALTER TABLE bookmarks ADD COLUMN created_at TEXT');
+  }
+
+  if (!columns.has('updated_at')) {
+    db.run('ALTER TABLE bookmarks ADD COLUMN updated_at TEXT');
+  }
+}
+
+function getBookmarkByUrl(db, url) {
+  const stmt = db.prepare('SELECT id FROM bookmarks WHERE url = ?');
+  stmt.bind([url]);
+
+  let row = null;
+  if (stmt.step()) {
+    row = stmt.getAsObject();
+  }
+
+  stmt.free();
+  return row;
+}
+
+function getNextBookmarkId(db) {
+  const stmt = db.prepare('SELECT MAX(id) as max_id FROM bookmarks');
+  let maxId = 0;
+
+  if (stmt.step()) {
+    const row = stmt.getAsObject();
+    maxId = row?.max_id || 0;
+  }
+
+  stmt.free();
+  return maxId + 1;
+}
+
+async function safeNotify(tabId, message, type) {
+  if (!tabId) {
+    return;
+  }
+
+  try {
+    await sendNotification(tabId, message, type);
+  } catch (error) {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js']
+      });
+
+      await sendNotification(tabId, message, type);
+    } catch (injectError) {
+      console.warn('Unable to show notification:', injectError);
+    }
+  }
+}
+
+function sendNotification(tabId, message, type) {
+  return chrome.tabs.sendMessage(tabId, {
+    action: 'showNotification',
+    message,
+    type
+  });
+}
+
+
 function cleanWebDAVUrl(url) {
   url = url.replace(/\/+$/, '');
   url = url.replace(/([^:]\/)\/+/g, '$1');

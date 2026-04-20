@@ -1,20 +1,24 @@
-// Configuration storage keys
+
 const CONFIG_KEYS = {
   WEBDAV_URL: 'webdav_url',
   USERNAME: 'username',
   PASSWORD: 'password',
   DARK_MODE: 'dark_mode',
-  EINK_MODE: 'eink_mode'
+  EINK_MODE: 'eink_mode',
+  QUICK_SAVE_SILENT: 'quick_save_silent'
 };
 
-// DOM Elements
+const QUICK_SAVE_STORAGE_KEY = 'quick_save_bookmark_requested_at';
+const QUICK_SAVE_MAX_AGE_MS = 15000;
+
+
 const tabButtons = document.querySelectorAll('.tab-button');
 const tabContents = document.querySelectorAll('.tab-content');
 const saveButton = document.getElementById('save-button');
 const saveThinkButton = document.getElementById('save-think-button');
 const saveOptionsButton = document.getElementById('save-options-button');
 
-// Form elements
+
 const urlInput = document.getElementById('url');
 const titleInput = document.getElementById('title');
 const descriptionInput = document.getElementById('description');
@@ -26,12 +30,13 @@ const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
 const darkModeToggle = document.getElementById('dark-mode-toggle');
 const einkModeToggle = document.getElementById('eink-mode-toggle');
+const quickSaveSilentToggle = document.getElementById('quick-save-silent-toggle');
 
-// SQL.js initialization
+
 let SQL;
 let openDatabase;
 
-// Initialize SQL.js
+
 async function initSQL() {
   try {
     SQL = await initSqlJs({
@@ -41,8 +46,6 @@ async function initSQL() {
       const db = new SQL.Database(new Uint8Array(arrayBuffer));
       return {
         executeSql: (sql, params = []) => {
-          console.log('Executing SQL:', sql);
-          console.log('With params:', params);
           try {
             const stmt = db.prepare(sql);
             stmt.bind(params);
@@ -60,7 +63,7 @@ async function initSQL() {
             result.rows.length = rows.length;
             result.rows.item = (index) => rows[index];
             stmt.free();
-            console.log('SQL Result:', result);
+            ('SQL Result:', result);
             return result;
           } catch (error) {
             console.error('SQL Error:', error);
@@ -72,37 +75,43 @@ async function initSQL() {
         }
       };
     };
-    console.log('SQL.js initialized successfully');
   } catch (error) {
     console.error('Error initializing SQL.js:', error);
     throw error;
   }
 }
 
-// Function to ensure bookmarks table has required columns
+
 async function ensureBookmarksSchema(db) {
-  try {
-    await db.executeSql('ALTER TABLE bookmarks ADD COLUMN created_at TEXT');
-  } catch (e) {
-    // Column may already exist, ignore
+  const columnsResult = await db.executeSql('PRAGMA table_info(bookmarks)');
+  const existingColumns = new Set();
+
+  for (let i = 0; i < columnsResult.rows.length; i++) {
+    const row = columnsResult.rows.item(i);
+    if (row && row.name) {
+      existingColumns.add(row.name);
+    }
   }
-  try {
+
+  if (!existingColumns.has('created_at')) {
+    await db.executeSql('ALTER TABLE bookmarks ADD COLUMN created_at TEXT');
+  }
+
+  if (!existingColumns.has('updated_at')) {
     await db.executeSql('ALTER TABLE bookmarks ADD COLUMN updated_at TEXT');
-  } catch (e) {
-    // Column may already exist, ignore
   }
 }
 
-// Helper function to clean WebDAV URL
+
 function cleanWebDAVUrl(url) {
-  // Remove trailing slashes
+  
   url = url.replace(/\/+$/, '');
-  // Remove double slashes except for http:// or https://
+  
   url = url.replace(/([^:]\/)\/+/g, '$1');
   return url;
 }
 
-// Function to apply theme
+
 function applyTheme(isDark, isEink) {
   if (isDark) {
     document.body.classList.remove('light-theme');
@@ -116,14 +125,48 @@ function applyTheme(isDark, isEink) {
   }
 }
 
-// Helper function to validate bookmark data
+function switchToTab(tabName) {
+  tabButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+
+  tabContents.forEach(content => {
+    content.classList.toggle('hidden', content.id !== `${tabName}-tab`);
+  });
+}
+
+async function consumeQuickSaveRequest() {
+  const result = await chrome.storage.local.get([QUICK_SAVE_STORAGE_KEY]);
+  const requestedAt = result[QUICK_SAVE_STORAGE_KEY];
+
+  if (!requestedAt) {
+    return false;
+  }
+
+  await chrome.storage.local.remove(QUICK_SAVE_STORAGE_KEY);
+
+  return Date.now() - requestedAt <= QUICK_SAVE_MAX_AGE_MS;
+}
+
+async function handleQuickSaveRequest() {
+  const hasQuickSaveRequest = await consumeQuickSaveRequest();
+
+  if (!hasQuickSaveRequest) {
+    return;
+  }
+
+  switchToTab('save');
+  await saveBookmark();
+}
+
+
 async function validateBookmarkData() {
   const title = titleInput.value.trim();
   const url = urlInput.value.trim();
   const description = descriptionInput.value.trim();
   const tags = tagsInput.value.trim();
 
-  console.log('Validating bookmark data:', {
+  ('Validating bookmark data:', {
     title,
     url,
     description,
@@ -143,133 +186,130 @@ async function validateBookmarkData() {
   return true;
 }
 
-// Tab switching
+
 tabButtons.forEach(button => {
   button.addEventListener('click', () => {
     const tabName = button.dataset.tab;
-    
-    // Update active tab button
-    tabButtons.forEach(btn => btn.classList.remove('active'));
-    button.classList.add('active');
-    
-    // Show selected tab content
-    tabContents.forEach(content => {
-      content.classList.toggle('hidden', content.id !== `${tabName}-tab`);
-    });
+    switchToTab(tabName);
   });
 });
 
-// Load current tab info when popup opens
+
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    // Initialize SQL.js first
+    
     await initSQL();
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    console.log('Current tab:', tab);
+    ('Current tab:', tab);
     urlInput.value = tab.url;
     titleInput.value = tab.title;
     
-    // Load saved configuration
+    
     const config = await chrome.storage.sync.get([
       CONFIG_KEYS.WEBDAV_URL,
       CONFIG_KEYS.USERNAME,
       CONFIG_KEYS.PASSWORD,
       CONFIG_KEYS.DARK_MODE,
-      CONFIG_KEYS.EINK_MODE
+      CONFIG_KEYS.EINK_MODE,
+      CONFIG_KEYS.QUICK_SAVE_SILENT
     ]);
     
     webdavUrlInput.value = config[CONFIG_KEYS.WEBDAV_URL] || '';
     usernameInput.value = config[CONFIG_KEYS.USERNAME] || '';
     passwordInput.value = config[CONFIG_KEYS.PASSWORD] || '';
-    darkModeToggle.checked = config[CONFIG_KEYS.DARK_MODE] !== false; // default true
-    einkModeToggle.checked = config[CONFIG_KEYS.EINK_MODE] === true; // default false
+    darkModeToggle.checked = config[CONFIG_KEYS.DARK_MODE] !== false; 
+    einkModeToggle.checked = config[CONFIG_KEYS.EINK_MODE] === true; 
+    quickSaveSilentToggle.checked = config[CONFIG_KEYS.QUICK_SAVE_SILENT] === true; 
     
-    // Set initial checked class on labels
+    
     darkModeToggle.parentElement.classList.toggle('checked', darkModeToggle.checked);
     einkModeToggle.parentElement.classList.toggle('checked', einkModeToggle.checked);
+    quickSaveSilentToggle.parentElement.classList.toggle('checked', quickSaveSilentToggle.checked);
     
-    // Apply theme
+    
     applyTheme(darkModeToggle.checked, einkModeToggle.checked);
+
+    await handleQuickSaveRequest();
   } catch (error) {
     console.error('Error in DOMContentLoaded:', error);
     alert('Error initializing extension: ' + error.message);
   }
 });
 
-// Function to get the next available ID from the bookmarks table
+
 async function getNextBookmarkId(db) {
   const result = await db.executeSql('SELECT MAX(id) as max_id FROM bookmarks');
   const maxId = result.rows.item(0).max_id;
   return maxId ? maxId + 1 : 1;
 }
 
-// Function to get or create tag IDs
+
 async function getOrCreateTagIds(db, tags) {
   const tagIds = [];
   for (const tag of tags) {
-    // Check if tag exists
+    
     const result = await db.executeSql('SELECT id FROM bookmarks_tags WHERE tag = ?', [tag]);
     let tagId;
     
     if (result.rows.length === 0) {
-      // Create new tag
+      
       await db.executeSql('INSERT INTO bookmarks_tags (tag) VALUES (?)', [tag]);
-      // Get the ID of the newly created tag
+      
       const newTagResult = await db.executeSql('SELECT id FROM bookmarks_tags WHERE tag = ?', [tag]);
       tagId = newTagResult.rows.item(0).id;
-      console.log(`Created new tag '${tag}' with ID: ${tagId}`);
+      (`Created new tag '${tag}' with ID: ${tagId}`);
     } else {
       tagId = result.rows.item(0).id;
-      console.log(`Found existing tag '${tag}' with ID: ${tagId}`);
+      (`Found existing tag '${tag}' with ID: ${tagId}`);
     }
     tagIds.push(tagId);
   }
-  console.log('Final tag IDs:', tagIds);
+  ('Final tag IDs:', tagIds);
   return tagIds;
 }
 
-// Function to check URL patterns and add automatic tags
+
 async function getAutomaticTags(db, url) {
-  // Primero obtenemos todos los patrones
+  
   const patternsResult = await db.executeSql('SELECT url_pattern, tag FROM bookmarks_tag_url_patterns');
   const automaticTags = [];
   
-  // Para cada patrón, verificamos si la URL lo contiene
+  
   for (let i = 0; i < patternsResult.rows.length; i++) {
     const pattern = patternsResult.rows.item(i);
     if (url.includes(pattern.url_pattern)) {
       automaticTags.push(pattern.tag);
-      console.log(`URL matches pattern '${pattern.url_pattern}', adding tag '${pattern.tag}'`);
+      (`URL matches pattern '${pattern.url_pattern}', adding tag '${pattern.tag}'`);
     }
   }
   
-  console.log('Automatic tags found:', automaticTags);
+  ('Automatic tags found:', automaticTags);
   return automaticTags;
 }
 
-// Function to decode HTML entities
+
 function decodeHtmlEntities(text) {
   const textarea = document.createElement('textarea');
   textarea.innerHTML = text;
   return textarea.value;
 }
 
-// Function to check if URL exists in database
+
 async function checkUrlExists(db, url) {
   const result = await db.executeSql('SELECT id, title FROM bookmarks WHERE url = ?', [url]);
   return result.rows.length > 0 ? result.rows.item(0) : null;
 }
 
-// Function to update existing bookmark
+
 async function updateExistingBookmark(db, bookmarkId, bookmarkData) {
-  // Ensure created_at is set
+  
   const current = await db.executeSql('SELECT timestamp, created_at FROM bookmarks WHERE id = ?', [bookmarkId]);
   if (current.rows.length > 0 && !current.rows.item(0).created_at) {
     await db.executeSql('UPDATE bookmarks SET created_at = ? WHERE id = ?', [current.rows.item(0).timestamp, bookmarkId]);
   }
   
-  // Update the bookmark with new data and updated_at
+  
   await db.executeSql(
     'UPDATE bookmarks SET title = ?, description = ?, timestamp = ?, tag_ids = ?, updated_at = ? WHERE id = ?',
     [
@@ -283,21 +323,21 @@ async function updateExistingBookmark(db, bookmarkId, bookmarkData) {
   );
 }
 
-// Function to show success animation
+
 function showSuccessAnimation() {
   const animation = document.createElement('div');
   animation.className = 'success-animation';
   animation.innerHTML = `<div class="success-icon"></div>`;
   document.body.appendChild(animation);
 
-  // Remove the animation element after it completes
+  
   animation.addEventListener('animationend', () => {
     animation.remove();
     window.close();
   });
 }
 
-// Function to show custom dialog
+
 function showDialog(title, content) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -333,7 +373,7 @@ function showDialog(title, content) {
     cancelButton.addEventListener('click', () => closeDialog(false));
     confirmButton.addEventListener('click', () => closeDialog(true));
     
-    // Close on overlay click
+    
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
         closeDialog(false);
@@ -342,7 +382,7 @@ function showDialog(title, content) {
   });
 }
 
-// Function to show info dialog (one button)
+
 function showInfoDialog(title, content) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -382,9 +422,9 @@ function showInfoDialog(title, content) {
   });
 }
 
-// Save bookmark
+
 async function saveBookmark() {
-  // Validate data before proceeding
+  
   if (!await validateBookmarkData()) {
     return;
   }
@@ -404,7 +444,7 @@ async function saveBookmark() {
     const webdavUrl = cleanWebDAVUrl(config[CONFIG_KEYS.WEBDAV_URL]);
     const dbUrl = `${webdavUrl}/thinknote.db`;
 
-    // First, download the current database
+    
     const dbResponse = await fetch(dbUrl, {
       headers: {
         'Authorization': 'Basic ' + btoa(`${config[CONFIG_KEYS.USERNAME]}:${config[CONFIG_KEYS.PASSWORD]}`),
@@ -419,13 +459,13 @@ async function saveBookmark() {
     const dbBlob = await dbResponse.blob();
     const dbArrayBuffer = await dbBlob.arrayBuffer();
     
-    // Open the database
+    
     const db = await openDatabase(dbArrayBuffer);
     
-    // Ensure schema is up to date
+    
     await ensureBookmarksSchema(db);
     
-    // Check if URL already exists
+    
     const existingBookmark = await checkUrlExists(db, urlInput.value.trim());
     
     if (existingBookmark) {
@@ -438,23 +478,23 @@ async function saveBookmark() {
       }
     }
     
-    // Get manual tags
+    
     const manualTags = tagsInput.value.split(',').map(tag => tag.trim()).filter(tag => tag);
-    console.log('Manual tags:', manualTags);
+    ('Manual tags:', manualTags);
     
-    // Get automatic tags from URL patterns
+    
     const automaticTags = await getAutomaticTags(db, urlInput.value);
-    console.log('Automatic tags:', automaticTags);
+    ('Automatic tags:', automaticTags);
     
-    // Combine and deduplicate tags
+    
     const allTags = [...new Set([...manualTags, ...automaticTags])];
-    console.log('All tags:', allTags);
+    ('All tags:', allTags);
     
-    // Get or create tag IDs
+    
     const tagIds = await getOrCreateTagIds(db, allTags);
-    console.log('Tag IDs to be assigned:', tagIds);
+    ('Tag IDs to be assigned:', tagIds);
     
-    // Prepare bookmark data
+    
     const now = new Date().toISOString();
     const bookmarkData = {
       title: titleInput.value.trim(),
@@ -469,15 +509,15 @@ async function saveBookmark() {
     };
 
     if (existingBookmark) {
-      // Update existing bookmark
+      
       await updateExistingBookmark(db, existingBookmark.id, bookmarkData);
-      console.log('Updating existing bookmark with data:', bookmarkData);
+      ('Updating existing bookmark with data:', bookmarkData);
     } else {
-      // Get next bookmark ID for new bookmark
+      
       const nextId = await getNextBookmarkId(db);
       bookmarkData.id = nextId;
       
-      // Insert new bookmark
+      
       await db.executeSql(
         'INSERT INTO bookmarks (id, title, url, description, timestamp, hidden, tag_ids, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
@@ -492,19 +532,19 @@ async function saveBookmark() {
           bookmarkData.updated_at
         ]
       );
-      console.log('Inserting new bookmark with data:', bookmarkData);
+      ('Inserting new bookmark with data:', bookmarkData);
     }
     
-    // Update sync_info with milliseconds timestamp
+    
     await db.executeSql(
       'UPDATE sync_info SET last_modified = ? WHERE id = 1',
       [bookmarkData.lastModified]
     );
     
-    // Get the updated database as a blob
+    
     const updatedDbBlob = await db.export();
     
-    // Upload the updated database
+    
     const uploadResponse = await fetch(dbUrl, {
       method: 'PUT',
       headers: {
@@ -540,53 +580,43 @@ tagsInput.addEventListener('keydown', (e) => {
   }
 });
 
-// Save options
+
 saveOptionsButton.addEventListener('click', async () => {
   const config = {
     [CONFIG_KEYS.WEBDAV_URL]: cleanWebDAVUrl(webdavUrlInput.value),
     [CONFIG_KEYS.USERNAME]: usernameInput.value,
     [CONFIG_KEYS.PASSWORD]: passwordInput.value,
     [CONFIG_KEYS.DARK_MODE]: darkModeToggle.checked,
-    [CONFIG_KEYS.EINK_MODE]: einkModeToggle.checked
+    [CONFIG_KEYS.EINK_MODE]: einkModeToggle.checked,
+    [CONFIG_KEYS.QUICK_SAVE_SILENT]: quickSaveSilentToggle.checked
   };
 
   await chrome.storage.sync.set(config);
   await showInfoDialog('Options Saved', 'Your options have been saved successfully.');
 });
 
-// Apply theme on toggle change
+
 darkModeToggle.addEventListener('change', async () => {
   darkModeToggle.parentElement.classList.toggle('checked', darkModeToggle.checked);
   applyTheme(darkModeToggle.checked, einkModeToggle.checked);
-  // Save immediately
+  
   await chrome.storage.sync.set({ [CONFIG_KEYS.DARK_MODE]: darkModeToggle.checked });
 });
 
-// Apply theme on eink toggle change
+
 einkModeToggle.addEventListener('change', async () => {
   einkModeToggle.parentElement.classList.toggle('checked', einkModeToggle.checked);
   applyTheme(darkModeToggle.checked, einkModeToggle.checked);
-  // Save immediately
+  
   await chrome.storage.sync.set({ [CONFIG_KEYS.EINK_MODE]: einkModeToggle.checked });
 });
 
-// Load selected text when think tab is opened
-tabButtons.forEach(button => {
-  button.addEventListener('click', async () => {
-    const tabName = button.dataset.tab;
-    
-    // Update active tab button
-    tabButtons.forEach(btn => btn.classList.remove('active'));
-    button.classList.add('active');
-    
-    // Show selected tab content
-    tabContents.forEach(content => {
-      content.classList.toggle('hidden', content.id !== `${tabName}-tab`);
-    });
-  });
+quickSaveSilentToggle.addEventListener('change', async () => {
+  quickSaveSilentToggle.parentElement.classList.toggle('checked', quickSaveSilentToggle.checked);
+  await chrome.storage.sync.set({ [CONFIG_KEYS.QUICK_SAVE_SILENT]: quickSaveSilentToggle.checked });
 });
 
-// Save think
+
 saveThinkButton.addEventListener('click', async () => {
   const title = thinkTitleInput.value.trim();
   const content = thinkContentInput.value.trim();
@@ -616,7 +646,7 @@ saveThinkButton.addEventListener('click', async () => {
     const webdavUrl = cleanWebDAVUrl(config[CONFIG_KEYS.WEBDAV_URL]);
     const dbUrl = `${webdavUrl}/thinknote.db`;
 
-    // Download the current database
+    
     const dbResponse = await fetch(dbUrl, {
       headers: {
         'Authorization': 'Basic ' + btoa(`${config[CONFIG_KEYS.USERNAME]}:${config[CONFIG_KEYS.PASSWORD]}`),
@@ -631,18 +661,18 @@ saveThinkButton.addEventListener('click', async () => {
     const dbBlob = await dbResponse.blob();
     const dbArrayBuffer = await dbBlob.arrayBuffer();
     
-    // Open the database
+    
     const db = await openDatabase(dbArrayBuffer);
     
-    // Get next think ID
+    
     const nextIdResult = await db.executeSql('SELECT MAX(id) as max_id FROM thinks');
     const maxId = nextIdResult.rows.item(0).max_id;
     const nextId = maxId ? maxId + 1 : 1;
     
-    // Get current timestamp
+    
     const currentTime = Date.now();
     
-    // Insert new think
+    
     await db.executeSql(
       'INSERT INTO thinks (id, title, content, created_at, updated_at, deleted_at, is_favorite, tags, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
@@ -658,16 +688,16 @@ saveThinkButton.addEventListener('click', async () => {
       ]
     );
     
-    // Update sync_info
+    
     await db.executeSql(
       'UPDATE sync_info SET last_modified = ? WHERE id = 1',
       [currentTime]
     );
     
-    // Get the updated database as a blob
+    
     const updatedDbBlob = await db.export();
     
-    // Upload the updated database
+    
     const uploadResponse = await fetch(dbUrl, {
       method: 'PUT',
       headers: {
@@ -680,7 +710,7 @@ saveThinkButton.addEventListener('click', async () => {
 
     if (uploadResponse.ok) {
       showSuccessAnimation();
-      // Clear the form
+      
       thinkTitleInput.value = '';
       thinkContentInput.value = '';
     } else {
