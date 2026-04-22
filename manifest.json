@@ -27,18 +27,35 @@
         "mac": "Command+Shift+Y"
       },
       "description": "Quick save current page as bookmark"
+    },
+    "quick-save-think": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Save selected text as Think"
     }
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"]
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ]
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["lib/sql-wasm.js", "lib/sql-wasm.wasm"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "lib/sql-wasm.js",
+        "lib/sql-wasm.wasm"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "action": {
@@ -50,4 +67,4 @@
   "icons": {
     "512": "icons/icon512.png"
   }
-} 
+}

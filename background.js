@@ -17,29 +17,34 @@ chrome.runtime.onInstalled.addListener(() => {
 
 
 chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== 'quick-save-bookmark') {
-    return;
-  }
+  if (command === 'quick-save-bookmark') {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!activeTab?.id || !activeTab?.url || !/^https?:\/\//i.test(activeTab.url)) {
+      return;
+    }
 
-  if (!activeTab?.id || !activeTab?.url || !/^https?:\/\//i.test(activeTab.url)) {
-    return;
-  }
+    try {
+      const settings = await chrome.storage.sync.get([
+        'webdav_url',
+        'username',
+        'password',
+        QUICK_SAVE_SILENT_KEY
+      ]);
 
-  try {
-    const settings = await chrome.storage.sync.get([
-      'webdav_url',
-      'username',
-      'password',
-      QUICK_SAVE_SILENT_KEY
-    ]);
+      if (settings[QUICK_SAVE_SILENT_KEY] === true) {
+        const silentResult = await saveBookmarkToDatabase(activeTab, settings, { skipIfExists: true });
 
-    if (settings[QUICK_SAVE_SILENT_KEY] === true) {
-      const silentResult = await saveBookmarkToDatabase(activeTab, settings, { skipIfExists: true });
+        if (silentResult === 'saved') {
+          await safeNotify(activeTab.id, 'Bookmark saved', 'success');
+          return;
+        }
 
-      if (silentResult === 'saved') {
-        await safeNotify(activeTab.id, 'Bookmark saved', 'success');
+        await chrome.storage.local.set({
+          [QUICK_SAVE_STORAGE_KEY]: Date.now()
+        });
+
+        await chrome.action.openPopup();
         return;
       }
 
@@ -48,17 +53,54 @@ chrome.commands.onCommand.addListener(async (command) => {
       });
 
       await chrome.action.openPopup();
+    } catch (error) {
+      console.error('Error triggering quick save shortcut:', error);
+      await safeNotify(activeTab.id, 'Quick save failed: ' + error.message, 'error');
+    }
+  } else if (command === 'quick-save-think') {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (!activeTab?.id || !activeTab?.url || !/^https?:\/\//i.test(activeTab.url)) {
       return;
     }
 
-    await chrome.storage.local.set({
-      [QUICK_SAVE_STORAGE_KEY]: Date.now()
-    });
+    try {
+      const config = await chrome.storage.sync.get([
+        'webdav_url',
+        'username',
+        'password'
+      ]);
 
-    await chrome.action.openPopup();
-  } catch (error) {
-    console.error('Error triggering quick save shortcut:', error);
-    await safeNotify(activeTab.id, 'Quick save failed: ' + error.message, 'error');
+      if (!config.webdav_url) {
+        await safeNotify(activeTab.id, 'Please configure WebDAV settings first', 'error');
+        return;
+      }
+
+      // Send message to content script to get selected text
+      let selectedText = '';
+      try {
+        const response = await chrome.tabs.sendMessage(activeTab.id, { action: 'getSelection' });
+        selectedText = response?.selection || '';
+      } catch (msgError) {
+        if (msgError.message.includes('Could not establish connection')) {
+          await safeNotify(activeTab.id, 'Unable to access page content. Please refresh the page and try again.', 'error');
+          return;
+        }
+        throw msgError; // Re-throw other errors
+      }
+
+      if (!selectedText.trim()) {
+        await safeNotify(activeTab.id, 'No text selected', 'error');
+        return;
+      }
+
+      await saveThinkToDatabase(selectedText, config);
+
+      await safeNotify(activeTab.id, 'Think saved successfully!', 'success');
+    } catch (error) {
+      console.error('Error saving think via shortcut:', error);
+      await safeNotify(activeTab.id, 'Error saving think: ' + error.message, 'error');
+    }
   }
 });
 

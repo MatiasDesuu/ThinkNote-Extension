@@ -9,6 +9,8 @@ if (!window.__thinknoteContentScriptInitialized) {
       
       showCustomNotification(request.message, request.type);
       sendResponse({ success: true });
+    } else if (request.action === 'getSelection') {
+      sendResponse({ selection: window.getSelection().toString() });
     }
   });
 
