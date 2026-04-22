@@ -135,7 +135,6 @@ body {
     letter-spacing: 0.08em;
     cursor: pointer;
     border-radius: var(--radius);
-    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .tab-button:hover {
@@ -184,7 +183,6 @@ textarea {
     font-size: 13px;
     padding: 10px;
     outline: none;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 input::placeholder,
@@ -222,7 +220,6 @@ textarea {
     letter-spacing: 0.08em;
     padding: 11px 12px;
     cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .primary-button:hover {
@@ -242,6 +239,10 @@ textarea {
     gap: 8px;
 }
 
+label[for='quick-save-silent-toggle'] {
+    grid-column: 1 / -1;
+}
+
 input[type='checkbox'] {
     display: none;
 }
@@ -256,7 +257,6 @@ label[for='quick-save-silent-toggle'] {
     text-align: center;
     cursor: pointer;
     user-select: none;
-    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 label[for='dark-mode-toggle']:hover,
@@ -362,7 +362,6 @@ label[for='quick-save-silent-toggle'].checked {
     letter-spacing: 0.08em;
     padding: 10px 8px;
     cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .dialog-button:hover {

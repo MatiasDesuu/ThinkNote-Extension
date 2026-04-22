@@ -46,7 +46,6 @@ function showCustomNotification(message, type = 'success') {
     padding: 10px 12px;
     border-radius: 0;
     border: 1px solid #585550;
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
     font-family: 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
     font-size: 12px;
     font-weight: 700;
@@ -57,7 +56,6 @@ function showCustomNotification(message, type = 'success') {
     border-left: 3px solid ${theme.border};
     transform: translateX(100%);
     opacity: 0;
-    transition: all 0.18s ease;
     cursor: pointer;
     display: flex;
     align-items: center;
