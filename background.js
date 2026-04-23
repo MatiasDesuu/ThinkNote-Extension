@@ -258,20 +258,26 @@ async function saveBookmarkToDatabase(tab, config, options = {}) {
   const title = (tab.title || '').trim() || 'Untitled';
   const existingBookmark = getBookmarkByUrl(db, tab.url);
 
+  const automaticTags = getAutomaticTags(db, tab.url);
+  const tagIds = getOrCreateTagIds(db, automaticTags);
+  const tagIdsJson = JSON.stringify(tagIds);
+
   if (existingBookmark) {
     if (options.skipIfExists) {
       return 'exists';
     }
 
+    const existingTagIds = parseTagIds(existingBookmark.tag_ids);
+    const mergedTagIds = Array.from(new Set([...(existingTagIds || []), ...tagIds]));
     db.run(
-      'UPDATE bookmarks SET title = ?, timestamp = ?, updated_at = ? WHERE id = ?',
-      [title, nowIso, nowIso, existingBookmark.id]
+      'UPDATE bookmarks SET title = ?, timestamp = ?, updated_at = ?, tag_ids = ? WHERE id = ?',
+      [title, nowIso, nowIso, JSON.stringify(mergedTagIds), existingBookmark.id]
     );
   } else {
     const nextId = getNextBookmarkId(db);
     db.run(
       'INSERT INTO bookmarks (id, title, url, description, timestamp, hidden, tag_ids, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [nextId, title, tab.url, '', nowIso, 0, '[]', nowIso, nowIso]
+      [nextId, title, tab.url, '', nowIso, 0, tagIdsJson, nowIso, nowIso]
     );
   }
 
@@ -318,7 +324,7 @@ function ensureBookmarksSchema(db) {
 }
 
 function getBookmarkByUrl(db, url) {
-  const stmt = db.prepare('SELECT id FROM bookmarks WHERE url = ?');
+  const stmt = db.prepare('SELECT id, tag_ids FROM bookmarks WHERE url = ?');
   stmt.bind([url]);
 
   let row = null;
@@ -328,6 +334,69 @@ function getBookmarkByUrl(db, url) {
 
   stmt.free();
   return row;
+}
+
+function parseTagIds(tagIdsJson) {
+  try {
+    const parsed = JSON.parse(tagIdsJson || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function getAutomaticTags(db, url) {
+  const tags = [];
+  const stmt = db.prepare('SELECT url_pattern, tag FROM bookmarks_tag_url_patterns');
+
+  while (stmt.step()) {
+    const row = stmt.getAsObject();
+    if (row?.url_pattern && row?.tag && url.includes(row.url_pattern)) {
+      tags.push(row.tag);
+    }
+  }
+
+  stmt.free();
+  return tags;
+}
+
+function getOrCreateTagIds(db, tags) {
+  const tagIds = [];
+
+  for (const tag of tags) {
+    if (!tag || !tag.trim()) {
+      continue;
+    }
+
+    const selectStmt = db.prepare('SELECT id FROM bookmarks_tags WHERE tag = ?');
+    selectStmt.bind([tag]);
+
+    let tagId = null;
+    if (selectStmt.step()) {
+      tagId = selectStmt.getAsObject().id;
+    }
+    selectStmt.free();
+
+    if (!tagId) {
+      const insertStmt = db.prepare('INSERT INTO bookmarks_tags (tag) VALUES (?)');
+      insertStmt.bind([tag]);
+      insertStmt.step();
+      insertStmt.free();
+
+      const newTagStmt = db.prepare('SELECT id FROM bookmarks_tags WHERE tag = ?');
+      newTagStmt.bind([tag]);
+      if (newTagStmt.step()) {
+        tagId = newTagStmt.getAsObject().id;
+      }
+      newTagStmt.free();
+    }
+
+    if (tagId) {
+      tagIds.push(tagId);
+    }
+  }
+
+  return tagIds;
 }
 
 function getNextBookmarkId(db) {
