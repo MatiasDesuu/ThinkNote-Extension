@@ -671,14 +671,16 @@ saveThinkButton.addEventListener('click', async () => {
     
     
     const currentTime = Date.now();
-    
+    // Append URL if available
+    const currentUrl = urlInput.value.trim();
+    const contentWithUrl = currentUrl ? `${content}\n\nSource: ${currentUrl}` : content;
     
     await db.executeSql(
       'INSERT INTO thinks (id, title, content, created_at, updated_at, deleted_at, is_favorite, tags, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         nextId,
         title,
-        content,
+        contentWithUrl,
         currentTime,
         currentTime,
         null,

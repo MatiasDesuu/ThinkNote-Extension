@@ -94,7 +94,7 @@ chrome.commands.onCommand.addListener(async (command) => {
         return;
       }
 
-      await saveThinkToDatabase(selectedText, config);
+      await saveThinkToDatabase(selectedText, config, activeTab.url);
 
       await safeNotify(activeTab.id, 'Think saved successfully!', 'success');
     } catch (error) {
@@ -126,7 +126,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       }
 
       
-      await saveThinkToDatabase(info.selectionText, config);
+      await saveThinkToDatabase(info.selectionText, config, tab.url);
       
       
       chrome.tabs.sendMessage(tab.id, {
@@ -147,9 +147,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 
-async function saveThinkToDatabase(selectedText, config) {
+async function saveThinkToDatabase(selectedText, config, url = null) {
   const webdavUrl = cleanWebDAVUrl(config.webdav_url);
   const dbUrl = `${webdavUrl}/thinknote.db`;
+
+  // Append URL if provided
+  if (url) {
+    selectedText = `${selectedText}\n\nSource: ${url}`;
+  }
 
   
   const dbResponse = await fetch(dbUrl, {
