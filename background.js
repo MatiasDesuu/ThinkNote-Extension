@@ -147,6 +147,31 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'saveThink') {
+    handleSaveThinkMessage(request, sender, sendResponse);
+    return true; // Keep channel open
+  }
+});
+
+async function handleSaveThinkMessage(request, sender, sendResponse) {
+  try {
+    const config = await chrome.storage.sync.get(['webdav_url', 'username', 'password']);
+    
+    if (!config.webdav_url) {
+      sendResponse({ success: false, error: 'Please configure WebDAV settings first' });
+      return;
+    }
+
+    await saveThinkToDatabase(request.text, config, sender.tab.url);
+    sendResponse({ success: true });
+  } catch (error) {
+    console.error('Error in handleSaveThinkMessage:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}
+
+
 function addTextHighlightToUrl(url, text) {
   if (!url || !text) return url;
 

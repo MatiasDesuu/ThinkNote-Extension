@@ -5,7 +5,8 @@ const CONFIG_KEYS = {
   PASSWORD: 'password',
   DARK_MODE: 'dark_mode',
   EINK_MODE: 'eink_mode',
-  QUICK_SAVE_SILENT: 'quick_save_silent'
+  QUICK_SAVE_SILENT: 'quick_save_silent',
+  SELECTION_POPUP: 'selection_popup'
 };
 
 const QUICK_SAVE_STORAGE_KEY = 'quick_save_bookmark_requested_at';
@@ -31,6 +32,7 @@ const passwordInput = document.getElementById('password');
 const darkModeToggle = document.getElementById('dark-mode-toggle');
 const einkModeToggle = document.getElementById('eink-mode-toggle');
 const quickSaveSilentToggle = document.getElementById('quick-save-silent-toggle');
+const selectionPopupToggle = document.getElementById('selection-popup-toggle');
 
 
 let SQL;
@@ -236,7 +238,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     urlInput.value = tab.url;
     titleInput.value = tab.title;
 
-    // Get selection from the page to pre-populate Think tab and for highlighting
+
     window.initialSelection = '';
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
@@ -246,8 +248,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const firstLine = window.initialSelection.split('\n')[0].trim();
         thinkTitleInput.value = firstLine.length > 50 ? firstLine.substring(0, 50) + '...' : firstLine;
 
-        // If there's a selection, maybe switch to Think tab automatically?
-        // Let's not be too intrusive, but it's a common use case.
+
+
       }
     } catch (err) {
       console.log('Could not get selection:', err);
@@ -269,11 +271,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     darkModeToggle.checked = config[CONFIG_KEYS.DARK_MODE] !== false;
     einkModeToggle.checked = config[CONFIG_KEYS.EINK_MODE] === true;
     quickSaveSilentToggle.checked = config[CONFIG_KEYS.QUICK_SAVE_SILENT] === true;
+    selectionPopupToggle.checked = config[CONFIG_KEYS.SELECTION_POPUP] === true;
 
 
     darkModeToggle.parentElement.classList.toggle('checked', darkModeToggle.checked);
     einkModeToggle.parentElement.classList.toggle('checked', einkModeToggle.checked);
     quickSaveSilentToggle.parentElement.classList.toggle('checked', quickSaveSilentToggle.checked);
+    selectionPopupToggle.parentElement.classList.toggle('checked', selectionPopupToggle.checked);
 
 
     applyTheme(darkModeToggle.checked, einkModeToggle.checked);
@@ -636,7 +640,8 @@ saveOptionsButton.addEventListener('click', async () => {
     [CONFIG_KEYS.PASSWORD]: passwordInput.value,
     [CONFIG_KEYS.DARK_MODE]: darkModeToggle.checked,
     [CONFIG_KEYS.EINK_MODE]: einkModeToggle.checked,
-    [CONFIG_KEYS.QUICK_SAVE_SILENT]: quickSaveSilentToggle.checked
+    [CONFIG_KEYS.QUICK_SAVE_SILENT]: quickSaveSilentToggle.checked,
+    [CONFIG_KEYS.SELECTION_POPUP]: selectionPopupToggle.checked
   };
 
   await chrome.storage.sync.set(config);
@@ -662,6 +667,11 @@ einkModeToggle.addEventListener('change', async () => {
 quickSaveSilentToggle.addEventListener('change', async () => {
   quickSaveSilentToggle.parentElement.classList.toggle('checked', quickSaveSilentToggle.checked);
   await chrome.storage.sync.set({ [CONFIG_KEYS.QUICK_SAVE_SILENT]: quickSaveSilentToggle.checked });
+});
+
+selectionPopupToggle.addEventListener('change', async () => {
+  selectionPopupToggle.parentElement.classList.toggle('checked', selectionPopupToggle.checked);
+  await chrome.storage.sync.set({ [CONFIG_KEYS.SELECTION_POPUP]: selectionPopupToggle.checked });
 });
 
 
@@ -719,13 +729,13 @@ saveThinkButton.addEventListener('click', async () => {
 
 
     const currentTime = Date.now();
-    // Append URL if available
+
     const currentUrl = urlInput.value.trim();
     let finalUrl = currentUrl;
 
     if (currentUrl) {
-      // Use initialSelection for the highlight if it's part of the content,
-      // otherwise use the first 200 chars of the content itself.
+
+
       const highlightText = window.initialSelection || content;
       finalUrl = addTextHighlightToUrl(currentUrl, highlightText);
     }

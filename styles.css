@@ -239,8 +239,9 @@ textarea {
     gap: 8px;
 }
 
-label[for='quick-save-silent-toggle'] {
-    grid-column: 1 / -1;
+label[for='quick-save-silent-toggle'],
+label[for='selection-popup-toggle'] {
+    grid-column: span 1;
 }
 
 input[type='checkbox'] {
@@ -249,7 +250,8 @@ input[type='checkbox'] {
 
 label[for='dark-mode-toggle'],
 label[for='eink-mode-toggle'],
-label[for='quick-save-silent-toggle'] {
+label[for='quick-save-silent-toggle'],
+label[for='selection-popup-toggle'] {
     border: 1px solid var(--border);
     background: var(--btn-bg);
     color: var(--text-muted);
@@ -261,14 +263,16 @@ label[for='quick-save-silent-toggle'] {
 
 label[for='dark-mode-toggle']:hover,
 label[for='eink-mode-toggle']:hover,
-label[for='quick-save-silent-toggle']:hover {
+label[for='quick-save-silent-toggle']:hover,
+label[for='selection-popup-toggle']:hover {
     background: var(--btn-hover);
     color: var(--text-primary);
 }
 
 label[for='dark-mode-toggle'].checked,
 label[for='eink-mode-toggle'].checked,
-label[for='quick-save-silent-toggle'].checked {
+label[for='quick-save-silent-toggle'].checked,
+label[for='selection-popup-toggle'].checked {
     border-color: var(--accent);
     box-shadow: inset 0 0 0 1px var(--accent);
     color: var(--text-primary);
