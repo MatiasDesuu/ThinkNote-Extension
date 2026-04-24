@@ -108,7 +108,7 @@ chrome.commands.onCommand.addListener(async (command) => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'saveSelection') {
     try {
-      
+
       const config = await chrome.storage.sync.get([
         'webdav_url',
         'username',
@@ -116,7 +116,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       ]);
 
       if (!config.webdav_url) {
-        
+
         chrome.tabs.sendMessage(tab.id, {
           action: 'showNotification',
           message: 'Please configure WebDAV settings first',
@@ -125,10 +125,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         return;
       }
 
-      
+
       await saveThinkToDatabase(info.selectionText, config, tab.url);
-      
-      
+
+
       chrome.tabs.sendMessage(tab.id, {
         action: 'showNotification',
         message: 'Think saved successfully!',
@@ -136,7 +136,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       });
     } catch (error) {
       console.error('Error saving think:', error);
-      
+
       chrome.tabs.sendMessage(tab.id, {
         action: 'showNotification',
         message: 'Error saving think: ' + error.message,
@@ -147,16 +147,48 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 
+function addTextHighlightToUrl(url, text) {
+  if (!url || !text) return url;
+
+  const cleanText = text.trim()
+    .replace(/\r\n/g, ' ')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  if (!cleanText || cleanText.length < 2) return url;
+
+  let truncatedText = cleanText;
+  if (truncatedText.length > 500) {
+    truncatedText = truncatedText.substring(0, 500);
+  }
+
+  const encodedText = encodeURIComponent(truncatedText);
+
+  const fragment = `:~:text=${encodedText}`;
+
+  if (url.includes(':~:text=')) {
+    return url;
+  }
+
+  if (url.includes('#')) {
+    return `${url}${fragment}`;
+  } else {
+    return `${url}#${fragment}`;
+  }
+}
+
+
 async function saveThinkToDatabase(selectedText, config, url = null) {
   const webdavUrl = cleanWebDAVUrl(config.webdav_url);
   const dbUrl = `${webdavUrl}/thinknote.db`;
 
   // Append URL if provided
   if (url) {
-    selectedText = `${selectedText}\n\nSource: ${url}`;
+    const urlWithHighlight = addTextHighlightToUrl(url, selectedText);
+    selectedText = `${selectedText}\n\nSource: ${urlWithHighlight}`;
   }
 
-  
+
   const dbResponse = await fetch(dbUrl, {
     headers: {
       'Authorization': 'Basic ' + btoa(`${config.username}:${config.password}`),
@@ -171,26 +203,26 @@ async function saveThinkToDatabase(selectedText, config, url = null) {
   const dbBlob = await dbResponse.blob();
   const dbArrayBuffer = await dbBlob.arrayBuffer();
 
-  
+
   const SQL = await initSqlJs({
     locateFile: file => `lib/${file}`
   });
 
   const db = new SQL.Database(new Uint8Array(dbArrayBuffer));
 
-  
+
   const nextIdResult = db.exec('SELECT MAX(id) as max_id FROM thinks');
   const maxId = nextIdResult[0]?.values[0]?.[0] || 0;
   const nextId = maxId + 1;
 
-  
+
   const currentTime = Date.now();
 
-  
+
   const firstLine = selectedText.split('\n')[0].trim();
   const title = firstLine.length > 50 ? firstLine.substring(0, 50) + '...' : firstLine;
 
-  
+
   db.run(
     'INSERT INTO thinks (id, title, content, created_at, updated_at, deleted_at, is_favorite, tags, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
@@ -206,13 +238,13 @@ async function saveThinkToDatabase(selectedText, config, url = null) {
     ]
   );
 
-  
+
   db.run('UPDATE sync_info SET last_modified = ? WHERE id = 1', [currentTime]);
 
-  
+
   const updatedDbBlob = db.export();
 
-  
+
   const uploadResponse = await fetch(dbUrl, {
     method: 'PUT',
     headers: {

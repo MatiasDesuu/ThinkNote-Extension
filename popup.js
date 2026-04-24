@@ -104,11 +104,42 @@ async function ensureBookmarksSchema(db) {
 
 
 function cleanWebDAVUrl(url) {
-  
+
   url = url.replace(/\/+$/, '');
-  
+
   url = url.replace(/([^:]\/)\/+/g, '$1');
   return url;
+}
+
+
+function addTextHighlightToUrl(url, text) {
+  if (!url || !text) return url;
+
+  const cleanText = text.trim()
+    .replace(/\r\n/g, ' ')
+    .replace(/\n/g, ' ')
+    .replace(/\s+/g, ' ');
+
+  if (!cleanText || cleanText.length < 2) return url;
+
+  let truncatedText = cleanText;
+  if (truncatedText.length > 500) {
+    truncatedText = truncatedText.substring(0, 500);
+  }
+
+  const encodedText = encodeURIComponent(truncatedText);
+
+  const fragment = `:~:text=${encodedText}`;
+
+  if (url.includes(':~:text=')) {
+    return url;
+  }
+
+  if (url.includes('#')) {
+    return `${url}${fragment}`;
+  } else {
+    return `${url}#${fragment}`;
+  }
 }
 
 
@@ -197,15 +228,32 @@ tabButtons.forEach(button => {
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    
+
     await initSQL();
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     ('Current tab:', tab);
     urlInput.value = tab.url;
     titleInput.value = tab.title;
-    
-    
+
+    // Get selection from the page to pre-populate Think tab and for highlighting
+    window.initialSelection = '';
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'getSelection' });
+      window.initialSelection = response?.selection || '';
+      if (window.initialSelection && !thinkContentInput.value) {
+        thinkContentInput.value = window.initialSelection;
+        const firstLine = window.initialSelection.split('\n')[0].trim();
+        thinkTitleInput.value = firstLine.length > 50 ? firstLine.substring(0, 50) + '...' : firstLine;
+
+        // If there's a selection, maybe switch to Think tab automatically?
+        // Let's not be too intrusive, but it's a common use case.
+      }
+    } catch (err) {
+      console.log('Could not get selection:', err);
+    }
+
+
     const config = await chrome.storage.sync.get([
       CONFIG_KEYS.WEBDAV_URL,
       CONFIG_KEYS.USERNAME,
@@ -214,20 +262,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       CONFIG_KEYS.EINK_MODE,
       CONFIG_KEYS.QUICK_SAVE_SILENT
     ]);
-    
+
     webdavUrlInput.value = config[CONFIG_KEYS.WEBDAV_URL] || '';
     usernameInput.value = config[CONFIG_KEYS.USERNAME] || '';
     passwordInput.value = config[CONFIG_KEYS.PASSWORD] || '';
-    darkModeToggle.checked = config[CONFIG_KEYS.DARK_MODE] !== false; 
-    einkModeToggle.checked = config[CONFIG_KEYS.EINK_MODE] === true; 
-    quickSaveSilentToggle.checked = config[CONFIG_KEYS.QUICK_SAVE_SILENT] === true; 
-    
-    
+    darkModeToggle.checked = config[CONFIG_KEYS.DARK_MODE] !== false;
+    einkModeToggle.checked = config[CONFIG_KEYS.EINK_MODE] === true;
+    quickSaveSilentToggle.checked = config[CONFIG_KEYS.QUICK_SAVE_SILENT] === true;
+
+
     darkModeToggle.parentElement.classList.toggle('checked', darkModeToggle.checked);
     einkModeToggle.parentElement.classList.toggle('checked', einkModeToggle.checked);
     quickSaveSilentToggle.parentElement.classList.toggle('checked', quickSaveSilentToggle.checked);
-    
-    
+
+
     applyTheme(darkModeToggle.checked, einkModeToggle.checked);
 
     await handleQuickSaveRequest();
@@ -248,14 +296,14 @@ async function getNextBookmarkId(db) {
 async function getOrCreateTagIds(db, tags) {
   const tagIds = [];
   for (const tag of tags) {
-    
+
     const result = await db.executeSql('SELECT id FROM bookmarks_tags WHERE tag = ?', [tag]);
     let tagId;
-    
+
     if (result.rows.length === 0) {
-      
+
       await db.executeSql('INSERT INTO bookmarks_tags (tag) VALUES (?)', [tag]);
-      
+
       const newTagResult = await db.executeSql('SELECT id FROM bookmarks_tags WHERE tag = ?', [tag]);
       tagId = newTagResult.rows.item(0).id;
       (`Created new tag '${tag}' with ID: ${tagId}`);
@@ -271,11 +319,11 @@ async function getOrCreateTagIds(db, tags) {
 
 
 async function getAutomaticTags(db, url) {
-  
+
   const patternsResult = await db.executeSql('SELECT url_pattern, tag FROM bookmarks_tag_url_patterns');
   const automaticTags = [];
-  
-  
+
+
   for (let i = 0; i < patternsResult.rows.length; i++) {
     const pattern = patternsResult.rows.item(i);
     if (url.includes(pattern.url_pattern)) {
@@ -283,7 +331,7 @@ async function getAutomaticTags(db, url) {
       (`URL matches pattern '${pattern.url_pattern}', adding tag '${pattern.tag}'`);
     }
   }
-  
+
   ('Automatic tags found:', automaticTags);
   return automaticTags;
 }
@@ -303,13 +351,13 @@ async function checkUrlExists(db, url) {
 
 
 async function updateExistingBookmark(db, bookmarkId, bookmarkData) {
-  
+
   const current = await db.executeSql('SELECT timestamp, created_at FROM bookmarks WHERE id = ?', [bookmarkId]);
   if (current.rows.length > 0 && !current.rows.item(0).created_at) {
     await db.executeSql('UPDATE bookmarks SET created_at = ? WHERE id = ?', [current.rows.item(0).timestamp, bookmarkId]);
   }
-  
-  
+
+
   await db.executeSql(
     'UPDATE bookmarks SET title = ?, description = ?, timestamp = ?, tag_ids = ?, updated_at = ? WHERE id = ?',
     [
@@ -330,7 +378,7 @@ function showSuccessAnimation() {
   animation.innerHTML = `<div class="success-icon"></div>`;
   document.body.appendChild(animation);
 
-  
+
   animation.addEventListener('animationend', () => {
     animation.remove();
     window.close();
@@ -342,10 +390,10 @@ function showDialog(title, content) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'dialog-overlay';
-    
+
     const dialog = document.createElement('div');
     dialog.className = 'dialog';
-    
+
     dialog.innerHTML = `
       <div class="dialog-title">${title}</div>
       <div class="dialog-content">${content}</div>
@@ -354,13 +402,13 @@ function showDialog(title, content) {
         <button class="dialog-button primary">Overwrite</button>
       </div>
     `;
-    
+
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
-    
+
     const cancelButton = dialog.querySelector('.dialog-button.secondary');
     const confirmButton = dialog.querySelector('.dialog-button.primary');
-    
+
     const closeDialog = (result) => {
       overlay.style.animation = 'fadeIn 0.2s ease-out reverse';
       dialog.style.animation = 'scaleIn 0.2s ease-out reverse';
@@ -369,11 +417,11 @@ function showDialog(title, content) {
         resolve(result);
       }, 200);
     };
-    
+
     cancelButton.addEventListener('click', () => closeDialog(false));
     confirmButton.addEventListener('click', () => closeDialog(true));
-    
-    
+
+
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
         closeDialog(false);
@@ -424,7 +472,7 @@ function showInfoDialog(title, content) {
 
 
 async function saveBookmark() {
-  
+
   if (!await validateBookmarkData()) {
     return;
   }
@@ -444,7 +492,7 @@ async function saveBookmark() {
     const webdavUrl = cleanWebDAVUrl(config[CONFIG_KEYS.WEBDAV_URL]);
     const dbUrl = `${webdavUrl}/thinknote.db`;
 
-    
+
     const dbResponse = await fetch(dbUrl, {
       headers: {
         'Authorization': 'Basic ' + btoa(`${config[CONFIG_KEYS.USERNAME]}:${config[CONFIG_KEYS.PASSWORD]}`),
@@ -458,16 +506,16 @@ async function saveBookmark() {
 
     const dbBlob = await dbResponse.blob();
     const dbArrayBuffer = await dbBlob.arrayBuffer();
-    
-    
+
+
     const db = await openDatabase(dbArrayBuffer);
-    
-    
+
+
     await ensureBookmarksSchema(db);
-    
-    
+
+
     const existingBookmark = await checkUrlExists(db, urlInput.value.trim());
-    
+
     if (existingBookmark) {
       const shouldOverwrite = await showDialog(
         'Bookmark Already Exists',
@@ -477,24 +525,24 @@ async function saveBookmark() {
         return;
       }
     }
-    
-    
+
+
     const manualTags = tagsInput.value.split(',').map(tag => tag.trim()).filter(tag => tag);
     ('Manual tags:', manualTags);
-    
-    
+
+
     const automaticTags = await getAutomaticTags(db, urlInput.value);
     ('Automatic tags:', automaticTags);
-    
-    
+
+
     const allTags = [...new Set([...manualTags, ...automaticTags])];
     ('All tags:', allTags);
-    
-    
+
+
     const tagIds = await getOrCreateTagIds(db, allTags);
     ('Tag IDs to be assigned:', tagIds);
-    
-    
+
+
     const now = new Date().toISOString();
     const bookmarkData = {
       title: titleInput.value.trim(),
@@ -509,15 +557,15 @@ async function saveBookmark() {
     };
 
     if (existingBookmark) {
-      
+
       await updateExistingBookmark(db, existingBookmark.id, bookmarkData);
       ('Updating existing bookmark with data:', bookmarkData);
     } else {
-      
+
       const nextId = await getNextBookmarkId(db);
       bookmarkData.id = nextId;
-      
-      
+
+
       await db.executeSql(
         'INSERT INTO bookmarks (id, title, url, description, timestamp, hidden, tag_ids, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
@@ -534,17 +582,17 @@ async function saveBookmark() {
       );
       ('Inserting new bookmark with data:', bookmarkData);
     }
-    
-    
+
+
     await db.executeSql(
       'UPDATE sync_info SET last_modified = ? WHERE id = 1',
       [bookmarkData.lastModified]
     );
-    
-    
+
+
     const updatedDbBlob = await db.export();
-    
-    
+
+
     const uploadResponse = await fetch(dbUrl, {
       method: 'PUT',
       headers: {
@@ -599,7 +647,7 @@ saveOptionsButton.addEventListener('click', async () => {
 darkModeToggle.addEventListener('change', async () => {
   darkModeToggle.parentElement.classList.toggle('checked', darkModeToggle.checked);
   applyTheme(darkModeToggle.checked, einkModeToggle.checked);
-  
+
   await chrome.storage.sync.set({ [CONFIG_KEYS.DARK_MODE]: darkModeToggle.checked });
 });
 
@@ -607,7 +655,7 @@ darkModeToggle.addEventListener('change', async () => {
 einkModeToggle.addEventListener('change', async () => {
   einkModeToggle.parentElement.classList.toggle('checked', einkModeToggle.checked);
   applyTheme(darkModeToggle.checked, einkModeToggle.checked);
-  
+
   await chrome.storage.sync.set({ [CONFIG_KEYS.EINK_MODE]: einkModeToggle.checked });
 });
 
@@ -646,7 +694,7 @@ saveThinkButton.addEventListener('click', async () => {
     const webdavUrl = cleanWebDAVUrl(config[CONFIG_KEYS.WEBDAV_URL]);
     const dbUrl = `${webdavUrl}/thinknote.db`;
 
-    
+
     const dbResponse = await fetch(dbUrl, {
       headers: {
         'Authorization': 'Basic ' + btoa(`${config[CONFIG_KEYS.USERNAME]}:${config[CONFIG_KEYS.PASSWORD]}`),
@@ -660,21 +708,30 @@ saveThinkButton.addEventListener('click', async () => {
 
     const dbBlob = await dbResponse.blob();
     const dbArrayBuffer = await dbBlob.arrayBuffer();
-    
-    
+
+
     const db = await openDatabase(dbArrayBuffer);
-    
-    
+
+
     const nextIdResult = await db.executeSql('SELECT MAX(id) as max_id FROM thinks');
     const maxId = nextIdResult.rows.item(0).max_id;
     const nextId = maxId ? maxId + 1 : 1;
-    
-    
+
+
     const currentTime = Date.now();
     // Append URL if available
     const currentUrl = urlInput.value.trim();
-    const contentWithUrl = currentUrl ? `${content}\n\nSource: ${currentUrl}` : content;
-    
+    let finalUrl = currentUrl;
+
+    if (currentUrl) {
+      // Use initialSelection for the highlight if it's part of the content,
+      // otherwise use the first 200 chars of the content itself.
+      const highlightText = window.initialSelection || content;
+      finalUrl = addTextHighlightToUrl(currentUrl, highlightText);
+    }
+
+    const contentWithUrl = currentUrl ? `${content}\n\nSource: ${finalUrl}` : content;
+
     await db.executeSql(
       'INSERT INTO thinks (id, title, content, created_at, updated_at, deleted_at, is_favorite, tags, order_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
@@ -689,17 +746,17 @@ saveThinkButton.addEventListener('click', async () => {
         0
       ]
     );
-    
-    
+
+
     await db.executeSql(
       'UPDATE sync_info SET last_modified = ? WHERE id = 1',
       [currentTime]
     );
-    
-    
+
+
     const updatedDbBlob = await db.export();
-    
-    
+
+
     const uploadResponse = await fetch(dbUrl, {
       method: 'PUT',
       headers: {
@@ -712,7 +769,7 @@ saveThinkButton.addEventListener('click', async () => {
 
     if (uploadResponse.ok) {
       showSuccessAnimation();
-      
+
       thinkTitleInput.value = '';
       thinkContentInput.value = '';
     } else {
